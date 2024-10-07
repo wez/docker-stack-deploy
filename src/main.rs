@@ -55,10 +55,27 @@ enum Command {
         #[arg(long = "file")]
         files: Vec<PathBuf>,
     },
+    Run {
+        /// Local path into which the repo should be cloned
+        #[arg(long)]
+        repo_dir: String,
+
+        /// URL from which the repo should be cloned
+        #[arg(long)]
+        repo_url: String,
+
+        /// How many seconds to wait between checking the repo for updates
+        #[arg(long, default_value = "300")]
+        poll_interval: u64,
+    },
 }
 
 impl Args {
     fn open_kdbx(&self) -> anyhow::Result<KeePassDB> {
+        self.open_kdbx_path(&self.kdbx)
+    }
+
+    fn open_kdbx_path(&self, path: &str) -> anyhow::Result<KeePassDB> {
         let password = if let Some(pwd) = self.password.as_ref().map(Clone::clone) {
             pwd
         } else if let Ok(s) = std::env::var("STACK_KDBX_PASS") {
@@ -72,7 +89,7 @@ impl Args {
             );
         };
 
-        KeePassDB::open_with_password(&self.kdbx, &password)
+        KeePassDB::open_with_password(path, &password)
     }
 }
 
@@ -121,6 +138,26 @@ fn do_compose_up(db: &KeePassDB, path: &Path, deploy: &StackDeploy) -> anyhow::R
         .status()
         .with_context(|| format!("failed to run docker compose up in directory of {path:?}"))?;
     anyhow::ensure!(status.success(), "exit status is {status:?}");
+    Ok(())
+}
+
+fn run_deploy(args: &Args, repo_dir: &str) -> anyhow::Result<()> {
+    let secrets_path = format!("{repo_dir}/.secrets.kdbx");
+    let db = args.open_kdbx_path(&secrets_path)?;
+
+    let sorted = load_stacks(repo_dir, &[])?;
+
+    for entry in sorted {
+        match do_compose_up(&db, &entry.path, &entry.deploy) {
+            Ok(()) => {
+                log::info!("Deployed {:?}!", entry.path);
+            }
+            Err(err) => {
+                log::error!("Failed to deploy {:?}: {err:#}", entry.path);
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -173,7 +210,123 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        Command::Run {
+            repo_dir,
+            repo_url,
+            poll_interval,
+        } => {
+            let interval = std::time::Duration::from_secs(*poll_interval);
+            let mut first_run = true;
+
+            loop {
+                let hash = clone_or_update(repo_url, repo_dir)?;
+                log::debug!("hash is {hash:?}");
+                if hash.updated() || first_run {
+                    log::info!("Running a deploy {hash:?}");
+                    if let Err(err) = run_deploy(&args, repo_dir) {
+                        log::error!("Error running deploy: {err:#}");
+                    }
+                }
+                first_run = false;
+                std::thread::sleep(interval);
+            }
+        }
     }
 
     Ok(())
+}
+
+fn getenv(name: &str) -> anyhow::Result<String> {
+    std::env::var(name).with_context(|| format!("env var {name} not found"))
+}
+
+#[derive(Debug)]
+#[allow(unused)]
+enum RepoUpdateStatus {
+    Cloned(String),
+    Updated(String),
+    Same(String),
+}
+
+impl RepoUpdateStatus {
+    pub fn updated(&self) -> bool {
+        match self {
+            Self::Cloned(_) | Self::Updated(_) => true,
+            Self::Same(_) => false,
+        }
+    }
+}
+
+fn get_repo_commit_hash(repo_dir: &str) -> anyhow::Result<String> {
+    let mut cmd = std::process::Command::new("git");
+    cmd.current_dir(repo_dir);
+    cmd.args(["rev-parse", "HEAD"]);
+    let output = cmd
+        .output()
+        .with_context(|| format!("failed to get current commit hash of git repo {repo_dir}"))?;
+    anyhow::ensure!(
+        output.status.success(),
+        "exit status is {:?}",
+        output.status
+    );
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn clone_or_update(repo_url: &str, repo_dir: &str) -> anyhow::Result<RepoUpdateStatus> {
+    let dot_git = format!("{repo_dir}/.git");
+
+    let recreate = match std::fs::metadata(&dot_git) {
+        Ok(meta) => !meta.is_dir(),
+        Err(err) => {
+            log::warn!("Error getting metadata for {dot_git}: {err:#}");
+            true
+        }
+    };
+
+    let mut cmd = std::process::Command::new("git");
+    // TODO: if we have the repo checked out, we could try to read current
+    // versions of these creds from the secrets file, which would allow
+    // managing token expiration without redeploying the redeployer.
+    let username = getenv("GITHUB_USERNAME")?;
+    let password = getenv("GITHUB_TOKEN")?;
+
+    // We want to avoid baking the PAT from the time we clone the repo
+    // into the repo so that we can update the token over time.
+    // These ad-hoc config overrides facilitate passing in the creds
+    // <https://stackoverflow.com/a/77199818/149111>
+    cmd.args(["-c", &format!("credential.username={username}")]);
+    cmd.args([
+        "-c",
+        "credential.helper=!f(){ test \"$1\" = get && echo \"password=${GITHUB_TOKEN}\"; }; f",
+    ]);
+    cmd.env("GITHUB_TOKEN", password);
+
+    let mut hash_before = None;
+
+    if recreate {
+        if let Err(err) = std::fs::remove_dir_all(&repo_dir) {
+            log::warn!("Error removing {repo_dir}: {err:#}");
+        }
+
+        cmd.args(["clone", &repo_url, repo_dir]);
+    } else {
+        hash_before = get_repo_commit_hash(repo_dir).ok();
+
+        cmd.current_dir(repo_dir);
+        cmd.args(["fetch", "origin"]);
+    }
+
+    let status = cmd
+        .status()
+        .with_context(|| format!("failed to update git repo {repo_dir} from {repo_url}"))?;
+    anyhow::ensure!(status.success(), "exit status is {status:?}");
+
+    let hash_after = get_repo_commit_hash(repo_dir)?;
+
+    Ok(match (hash_before, hash_after) {
+        (Some(before), after) if before == after => RepoUpdateStatus::Same(after),
+        (Some(_before), after) => RepoUpdateStatus::Updated(after),
+        (None, after) => RepoUpdateStatus::Cloned(after),
+    })
 }
