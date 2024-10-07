@@ -1,0 +1,17 @@
+[package]
+name = "docker-stack-deploy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+env_logger = "0.11"
+filenamegen = "0.2"
+gethostname = "0.5.0"
+keepass = "0.7"
+log = "0.4"
+petgraph = "0.6.5"
+rpassword = "7"
+serde = {version="1.0", features=["derive"]}
+toml = "0.8"
