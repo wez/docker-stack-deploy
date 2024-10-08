@@ -14,6 +14,8 @@ services:
       - STACK_KDBX_PASS=${STACK_KDBX_PASS}
       # optional: how many seconds between git pulls
       - POLL_INTERVAL=${POLL_INTERVAL}
+      - STACK_REPO_DIR=/var/lib/docker-stack-deploy
     volumes:
       # required to enable spawning containers on the host
       - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker-stack-deploy:/var/lib/docker-stack-deploy

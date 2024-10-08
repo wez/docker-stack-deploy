@@ -9,5 +9,5 @@ exec /usr/bin/docker-stack-deploy \
   --kdbx /app/repo/.secrets.kdbc \
   run \
   --poll-interval "${POLL_INTERVAL}" \
-  --repo-dir /app/repo \
+  --repo-dir /var/lib/docker-stack-deploy \
   --repo-url "${GITHUB_URL}"
