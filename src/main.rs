@@ -373,7 +373,7 @@ fn clone_or_update(repo_url: &str, repo_dir: &str) -> anyhow::Result<RepoUpdateS
         hash_before = get_repo_commit_hash(repo_dir).ok();
 
         cmd.current_dir(repo_dir);
-        cmd.args(["fetch", "origin"]);
+        cmd.args(["pull", "--rebase"]);
     }
 
     let status = cmd
