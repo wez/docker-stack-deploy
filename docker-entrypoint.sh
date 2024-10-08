@@ -5,7 +5,7 @@ export POLL_INTERVAL=${POLL_INTERVAL:-300}
 export GITHUB_USERNAME=${GITHUB_USERNAME}
 export GITHUB_TOKEN=${GITHUB_TOKEN}
 
-exec /app/docker-stack-deploy \
+exec /usr/bin/docker-stack-deploy \
   --kdbx /app/repo/.secrets.kdbc \
   run \
   --poll-interval "${POLL_INTERVAL}" \

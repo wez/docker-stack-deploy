@@ -23,7 +23,8 @@ RUN apk --no-cache add \
     docker-compose && \
     rm -rf /var/cache/apk/* /tmp/*
 
-COPY --from=rust /app/docker-stack-deploy /app/docker-stack-deploy
-COPY docker-entrypoint.sh /app/entrypoint.sh
+COPY --from=rust /app/docker-stack-deploy /usr/bin/docker-stack-deploy
+COPY docker-entrypoint.sh /entrypoint.sh
 
-ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
+WORKDIR /app
+CMD ["/bin/bash", "/entrypoint.sh"]
