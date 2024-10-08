@@ -12,7 +12,7 @@ mod secrets;
 struct Args {
     /// Path to a KeePass .kdbx file containing secrets
     #[arg(long)]
-    kdbx: String,
+    kdbx: Option<String>,
 
     /// Password that can be used to decrypt the kdbx file
     #[arg(long)]
@@ -68,11 +68,32 @@ enum Command {
         #[arg(long, default_value = "300")]
         poll_interval: u64,
     },
+    Bootstrap {
+        /// Where to place the compose.yml and .env
+        #[arg(long)]
+        project_dir: String,
+
+        /// The repo that should be cloned
+        #[arg(long)]
+        git_url: String,
+
+        /// The git username to use
+        #[arg(long, default_value = "oauth2")]
+        git_username: String,
+
+        /// How many seconds between git pulls
+        #[arg(long, default_value = "300")]
+        poll_interval: u32,
+    },
 }
 
 impl Args {
     fn open_kdbx(&self) -> anyhow::Result<KeePassDB> {
-        self.open_kdbx_path(&self.kdbx)
+        let kdbx = self
+            .kdbx
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("no --kdbx file was specified"))?;
+        self.open_kdbx_path(&kdbx)
     }
 
     fn open_kdbx_path(&self, path: &str) -> anyhow::Result<KeePassDB> {
@@ -174,7 +195,7 @@ fn main() -> anyhow::Result<()> {
                     println!("{v}");
                 }
                 None => {
-                    log::error!("{path} not found in {}", args.kdbx);
+                    log::error!("{path} not found in {:?}", args.kdbx);
                     std::process::exit(1);
                 }
             }
@@ -230,6 +251,44 @@ fn main() -> anyhow::Result<()> {
                 first_run = false;
                 std::thread::sleep(interval);
             }
+        }
+        Command::Bootstrap {
+            project_dir,
+            git_url,
+            git_username,
+            poll_interval,
+        } => {
+            std::fs::create_dir_all(project_dir)
+                .with_context(|| format!("failed to create_dir_all {project_dir}"))?;
+
+            let github_token = rpassword::prompt_password("Github Token:")?;
+            let db_password = rpassword::prompt_password("KeePass Passphrase:")?;
+
+            let compose_yml = include_str!("../compose.yml");
+            let compose_file = format!("{project_dir}/compose.yml");
+            std::fs::write(&compose_file, compose_yml)
+                .with_context(|| format!("failed to write {compose_file}"))?;
+            let env_file = format!("{project_dir}/.env");
+            std::fs::write(
+                &env_file,
+                format!(
+                    "GITHUB_URL=\"{git_url}\"\n\
+                    GITHUB_USERNAME=\"{git_username}\"\n\
+                    GITHUB_TOKEN=\"{github_token}\"\n\
+                    STACK_KDBX_PASS=\"{db_password}\"\n\
+                    POLL_INTERVAL=\"{poll_interval}\"\n"
+                ),
+            )
+            .with_context(|| format!("failed to write {env_file}"))?;
+
+            let mut cmd = std::process::Command::new("docker");
+            cmd.args(["compose", "up", "--remove-orphans", "--detach", "--wait"]);
+            cmd.current_dir(project_dir);
+
+            let status = cmd
+                .status()
+                .with_context(|| format!("failed to run docker compose up in {project_dir}"))?;
+            anyhow::ensure!(status.success(), "exit status is {status:?}");
         }
     }
 

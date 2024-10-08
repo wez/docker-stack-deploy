@@ -26,5 +26,6 @@ RUN apk --no-cache add \
 COPY --from=rust /app/docker-stack-deploy /usr/bin/docker-stack-deploy
 COPY docker-entrypoint.sh /entrypoint.sh
 
+STOPSIGNAL SIGINT
 WORKDIR /app
 CMD ["/bin/bash", "/entrypoint.sh"]
