@@ -3,6 +3,7 @@ services:
   deployer:
     image: ghcr.io/wez/docker-stack-deploy
     container_name: docker-stack-deploy
+    restart: always
     # we need the hostname of the host to correctly match runs_on rules
     uts: host
     environment:
