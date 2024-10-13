@@ -9,6 +9,7 @@ on:
       - "Cargo.toml"
       - ".github/workflows/build-image.yml"
       - "Dockerfile"
+      - "compose.yml"
   workflow_dispatch:
 
 jobs:
