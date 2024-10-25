@@ -77,12 +77,12 @@ volumes:
   minecraft_data:
 ```
 
-> **Note**
-Avoid using local directories for mutable state, as you want to avoid dirtying
-your infrastructure repo checkout with files created by docker and potentially
-cause permission problems and potentially causing conflicts with future changes
-in your Git repo.  I recommend using docker volumes to hold the mutable state.
-Read-only mounts using config files in your repo are totally fine.
+> [!IMPORTANT]
+> Avoid using local directories for mutable state, as you want to avoid dirtying
+> your infrastructure repo checkout with files created by docker and potentially
+> cause permission problems and potentially causing conflicts with future changes
+> in your Git repo.  I recommend using docker volumes to hold the mutable state.
+> Read-only mounts using config files in your repo are totally fine.
 
 And this in `minecraft/stack-deploy.toml`:
 
