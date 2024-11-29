@@ -251,6 +251,15 @@ ssh into your docker host and run `docker restart docker-stack-deploy`.
 That will cause it to pull the repo immediately and run through the
 deploy commands.
 
+## How do I deploy without local directory without a git repo?
+
+If you don't want to use git repos, you can run the following command. Set 
+`--poll-interval` to 0 to disable the polling.
+
+```console
+docker-stack-deploy run --repo-dir=/path/to/your/stacks --poll-interval=0
+```
+
 ## Troubleshooting
 
 You can use `docker compose ls` to review the stacks that are running.

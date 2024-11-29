@@ -60,11 +60,11 @@ enum Command {
         #[arg(long)]
         repo_dir: String,
 
-        /// URL from which the repo should be cloned
+        /// URL from which the repo should be cloned if provided
         #[arg(long)]
-        repo_url: String,
+        repo_url: Option<String>,
 
-        /// How many seconds to wait between checking the repo for updates
+        /// How many seconds to wait between checking the repo for updates. 0 to disable.
         #[arg(long, default_value = "300")]
         poll_interval: u64,
     },
@@ -240,15 +240,31 @@ fn main() -> anyhow::Result<()> {
             let mut first_run = true;
 
             loop {
-                let hash = clone_or_update(repo_url, repo_dir)?;
-                log::debug!("hash is {hash:?}");
-                if hash.updated() || first_run {
-                    log::info!("Running a deploy {hash:?}");
-                    if let Err(err) = run_deploy(&args, repo_dir) {
-                        log::error!("Error running deploy: {err:#}");
+                match repo_url {
+                    Some(repo_url) => {
+                        let hash = clone_or_update(repo_url, repo_dir)?;
+                        log::debug!("hash is {hash:?}");
+                        if hash.updated() || first_run {
+                            log::info!("Running a deploy {hash:?}");
+                            if let Err(err) = run_deploy(&args, repo_dir) {
+                                log::error!("Error running deploy: {err:#}");
+                            }
+                        }
+                        first_run = false;
+                    }
+                    None => {
+                        log::info!("Running a deploy");
+                        if let Err(err) = run_deploy(&args, repo_dir) {
+                            log::error!("Error running deploy: {err:#}");
+                        }
                     }
                 }
-                first_run = false;
+
+                // Disable polling if the interval is 0
+                if *poll_interval == 0 {
+                    break;
+                }
+
                 std::thread::sleep(interval);
             }
         }
