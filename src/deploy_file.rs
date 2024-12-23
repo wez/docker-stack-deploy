@@ -26,6 +26,14 @@ pub struct StackDeploy {
     #[serde(default)]
     pub secret_env: BTreeMap<String, String>,
 
+    /// List of scripts to run before starting the stack
+    #[serde(default)]
+    pub pre_start: Vec<String>,
+
+    /// List of scripts to run after starting the stack
+    #[serde(default)]
+    pub post_start: Vec<String>,
+
     // TODO: secret_file
     /// List of host names on which to run this service
     pub runs_on: Vec<String>,

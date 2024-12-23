@@ -225,12 +225,19 @@ name = "homepage"
 runs_on = ["docker1"]
 # It requires that the traefik stack on docker1 be deployed first
 depends_on = ["traefik"]
+# It has a pre-start script that should be run before the stack is started
+pre_start = ["./pre_start"]
+# It has a post-script that should be run after the stack is started
+post_start = ["./post_start"]
 ```
 
 The stacks are topologically sorted based on their dependencies and then
 started in that order.
 
 It is not possible to depend on stacks that are running on other hosts.
+
+`pre_start` and `post_start` scripts can be run to do any necessary setup such
+as creating network resources.
 
 ## Stopping and removing a Stack
 
