@@ -162,9 +162,10 @@ fn do_compose_up(db: &KeePassDB, path: &Path, deploy: &StackDeploy) -> anyhow::R
     Ok(())
 }
 
-fn run_deploy(args: &Args, repo_dir: &str) -> anyhow::Result<()> {
+fn run_deploy(args: &Args, repo_dir: &str) -> anyhow::Result<bool> {
     let secrets_path = format!("{repo_dir}/.secrets.kdbx");
     let db = args.open_kdbx_path(&secrets_path)?;
+    let mut success = true;
 
     let sorted = load_stacks(repo_dir, &[])?;
 
@@ -174,12 +175,13 @@ fn run_deploy(args: &Args, repo_dir: &str) -> anyhow::Result<()> {
                 log::info!("Deployed {:?}!", entry.path);
             }
             Err(err) => {
+                success = false;
                 log::error!("Failed to deploy {:?}: {err:#}", entry.path);
             }
         }
     }
 
-    Ok(())
+    Ok(success)
 }
 
 fn main() -> anyhow::Result<()> {
@@ -244,11 +246,21 @@ fn main() -> anyhow::Result<()> {
                 log::debug!("hash is {hash:?}");
                 if hash.updated() || first_run {
                     log::info!("Running a deploy {hash:?}");
-                    if let Err(err) = run_deploy(&args, repo_dir) {
-                        log::error!("Error running deploy: {err:#}");
+                    match run_deploy(&args, repo_dir) {
+                        Ok(success) => {
+                            // Only clear the first_run status after a completely
+                            // successful deploy run.  This helps with things like
+                            // waiting for network mounts becoming available after
+                            // a power interruption, for example.
+                            if success {
+                                first_run = false;
+                            }
+                        }
+                        Err(err) => {
+                            log::error!("Error running deploy: {err:#}");
+                        }
                     }
                 }
-                first_run = false;
                 std::thread::sleep(interval);
             }
         }
