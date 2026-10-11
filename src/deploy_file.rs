@@ -62,7 +62,7 @@ pub fn load_stacks(root: &str, files: &[PathBuf]) -> anyhow::Result<Vec<DeployFi
             .with_context(|| format!("failed to parse {path:?} as toml"))?;
         println!("{deploy:#?}");
 
-        if deploy.runs_on.contains(&hostname) {
+        if deploy.runs_on.contains(&hostname) || deploy.runs_on.contains(&"*".to_string()) {
             anyhow::ensure!(
                 !stacks.contains_key(&deploy.name),
                 "multiple stacks have the same name {}",

@@ -94,6 +94,7 @@ name = "minecraft"
 
 # Lists the hosts on which this stack should run.
 # It should match the hostname of your docker host.
+# Set to * to run on all hosts.
 runs_on = ["mydockerhostname"]
 ```
 
