@@ -4,6 +4,15 @@ use anyhow::Context;
 use clap::Parser;
 use log::LevelFilter;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+static DOCKER_COMPOSE_STANDALONE_AVAILABLE: LazyLock<bool> = LazyLock::new(|| {
+    std::process::Command::new("docker-compose")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+});
 
 mod deploy_file;
 mod secrets;
@@ -115,8 +124,15 @@ impl Args {
 }
 
 fn do_compose_down(path: &Path) -> anyhow::Result<()> {
-    let mut cmd = std::process::Command::new("docker");
-    cmd.args(["compose", "down", "--remove-orphans"]);
+    let mut cmd = if *DOCKER_COMPOSE_STANDALONE_AVAILABLE {
+        std::process::Command::new("docker-compose")
+    } else {
+        let mut cmd = std::process::Command::new("docker");
+        cmd.arg("compose");
+        cmd
+    };
+
+    cmd.args(["down", "--remove-orphans"]);
     cmd.current_dir(
         path.parent()
             .ok_or_else(|| anyhow::anyhow!("path {path:?} has no parent!?"))?,
@@ -130,8 +146,14 @@ fn do_compose_down(path: &Path) -> anyhow::Result<()> {
 }
 
 fn do_compose_up(db: &KeePassDB, path: &Path, deploy: &StackDeploy) -> anyhow::Result<()> {
-    let mut cmd = std::process::Command::new("docker");
-    cmd.args(["compose", "up", "--remove-orphans", "--detach", "--wait"]);
+    let mut cmd = if *DOCKER_COMPOSE_STANDALONE_AVAILABLE {
+        std::process::Command::new("docker-compose")
+    } else {
+        let mut cmd = std::process::Command::new("docker");
+        cmd.arg("compose");
+        cmd
+    };
+    cmd.args(["up", "--remove-orphans", "--detach", "--wait"]);
     cmd.current_dir(
         path.parent()
             .ok_or_else(|| anyhow::anyhow!("path {path:?} has no parent!?"))?,
