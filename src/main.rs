@@ -155,10 +155,47 @@ fn do_compose_up(db: &KeePassDB, path: &Path, deploy: &StackDeploy) -> anyhow::R
         "Cannot deploy {path:?} because of the errors above"
     );
 
+    if !&deploy.pre_start.is_empty() {
+        let mut cmd = std::process::Command::new(&deploy.pre_start[0]);
+        cmd.current_dir(
+            path.parent()
+                .ok_or_else(|| anyhow::anyhow!("path {path:?} has no parent!?"))?,
+        );
+        for script in &deploy.pre_start[1..] {
+            cmd.arg(script);
+        }
+        for (k, v) in deploy.secret_env.iter() {
+            db.resolve_value(&v).map(|v| cmd.env(k, v));
+        }
+        let status = cmd
+            .status()
+            .with_context(|| format!("failed to run pre_start script in directory of {path:?}"))?;
+        anyhow::ensure!(status.success(), "pre_script exit status is {status:?}");
+    }
+
     let status = cmd
         .status()
         .with_context(|| format!("failed to run docker compose up in directory of {path:?}"))?;
     anyhow::ensure!(status.success(), "exit status is {status:?}");
+
+    if !&deploy.post_start.is_empty() {
+        let mut cmd = std::process::Command::new(&deploy.pre_start[0]);
+        cmd.current_dir(
+            path.parent()
+                .ok_or_else(|| anyhow::anyhow!("path {path:?} has no parent!?"))?,
+        );
+        for script in &deploy.post_start[1..] {
+            cmd.arg(script);
+        }
+        for (k, v) in deploy.secret_env.iter() {
+            db.resolve_value(&v).map(|v| cmd.env(k, v));
+        }
+        let status = cmd
+            .status()
+            .with_context(|| format!("failed to run post_start script in directory of {path:?}"))?;
+        anyhow::ensure!(status.success(), "post_start exit status is {status:?}");
+    }
+
     Ok(())
 }
 
